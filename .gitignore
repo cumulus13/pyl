@@ -1,0 +1,6 @@
+/target
+*.exe
+dist/
+
+# Ignore Sublime Text project files
+*.sublime-*

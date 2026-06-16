@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: pyl
+
+permissions:
+  contents: write
+
+jobs:
+  # ── 1. Build release binary ────────────────────────────────────────────────
+  build:
+    name: Build Windows binary
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Verify Cargo.toml version matches tag
+        shell: bash
+        run: |
+          CRATE_VER=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          TAG_VER="${{ steps.version.outputs.version }}"
+          if [ "$CRATE_VER" != "$TAG_VER" ]; then
+            echo "ERROR: Cargo.toml version ($CRATE_VER) != tag ($TAG_VER)"
+            exit 1
+          fi
+
+      - name: cargo build --release
+        run: cargo build --release
+
+      - name: Package binary
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          ARCHIVE="pyl-${VERSION}-x86_64-pc-windows-msvc"
+          mkdir -p dist/$ARCHIVE
+          cp target/release/pyl.exe dist/$ARCHIVE/
+          cp README.md LICENSE dist/$ARCHIVE/
+          cd dist
+          7z a "${ARCHIVE}.zip" "$ARCHIVE/"
+          echo "ARCHIVE=${ARCHIVE}.zip" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyl-windows
+          path: dist/*.zip
+
+  # ── 2. Create GitHub Release ───────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pyl-windows
+          path: dist/
+
+      - name: Generate changelog excerpt
+        id: changelog
+        shell: bash
+        run: |
+          VERSION=${{ needs.build.outputs.version }}
+          # Extract section between this version and previous from CHANGELOG.md if it exists
+          if [ -f CHANGELOG.md ]; then
+            awk "/^## \[?${VERSION}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md > notes.md
+          else
+            echo "Release v${VERSION}" > notes.md
+          fi
+          echo "notes_file=notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: pyl v${{ needs.build.outputs.version }}
+          body_path: notes.md
+          draft: false
+          prerelease: false
+          files: dist/*.zip
+
+  # ── 3. Publish to crates.io ───────────────────────────────────────────────
+  publish:
+    name: Publish to crates.io
+    needs: [build, github-release]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --no-verify
