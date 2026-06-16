@@ -67,7 +67,7 @@ pub fn run() {
         return;
     }
 
-    if raw_args.len() == 2 && (raw_args[1] == "-V" || raw_args[1] == "--version") {
+    if raw_args.len() == 2 && (raw_args[1] == "-v" || raw_args[1] == "--version") {
         let version = colorful_version!();
         version.print_and_exit();
     }
@@ -79,7 +79,7 @@ pub fn run() {
             print!("{}", USAGE);
             return;
         }
-        "-V" | "--version" = {
+        "-v" | "--version" = {
             let version = colorful_version!();
             version.print_and_exit();
         }
