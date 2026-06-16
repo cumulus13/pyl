@@ -79,6 +79,10 @@ pub fn run() {
             print!("{}", USAGE);
             return;
         }
+        "-V" | "--version" = {
+            let version = colorful_version!();
+            version.print_and_exit();
+        }
         "-0" | "list" => {
             list::print_all(&registry::read_all());
             return;

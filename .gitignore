@@ -4,3 +4,7 @@ dist/
 
 # Ignore Sublime Text project files
 *.sublime-*
+
+# Added entries (2 items)
+tmp*
+src/tmp*
