@@ -79,7 +79,7 @@ pub fn run() {
             print!("{}", USAGE);
             return;
         }
-        "-v" | "--version" = {
+        "-v" | "--version" => {
             let version = colorful_version!();
             version.print_and_exit();
         }
